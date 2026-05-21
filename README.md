@@ -18,21 +18,209 @@ It acts as a semantic memory layer on top of the Qdrant database.
 
 ### Tools
 
-1. `qdrant-store`
-   - Store some information in the Qdrant database
-   - Input:
-     - `information` (string): Information to store
-     - `metadata` (JSON): Optional metadata to store
-     - `collection_name` (string): Name of the collection to store the information in. This field is required if there are no default collection name.
-                                   If there is a default collection name, this field is not enabled.
-   - Returns: Confirmation message
-2. `qdrant-find`
-   - Retrieve relevant information from the Qdrant database
-   - Input:
-     - `query` (string): Query to use for searching
-     - `collection_name` (string): Name of the collection to store the information in. This field is required if there are no default collection name.
-                                   If there is a default collection name, this field is not enabled.
-   - Returns: Information stored in the Qdrant database as separate messages
+The server provides 14 tools organized into 5 categories:
+
+#### Collection Management
+
+| Tool | Description | Parameters |
+|------|-------------|------------|
+| `qdrant-store` | Store information with automatic embedding in Qdrant | `information`, `metadata` (optional), `collection_name` (optional) |
+| `qdrant-find` | Search for similar information using semantic embeddings | `query`, `collection_name` (optional), `query_filter` (optional) |
+| `qdrant-list-collections` | List all collections in the Qdrant server | *(none)* |
+| `qdrant-get-collection-info` | Get collection size, segments, and configuration | `collection_name` |
+| `qdrant-create-collection` | Create a new collection with specified vector settings | `collection_name`, `vector_size`, `distance` (optional) |
+| `qdrant-update-collection` | Update collection optimizer/replication settings | `collection_name`, `optimizer_config` (optional), `replication_factor` (optional), `write_consistency_factor` (optional) |
+| `qdrant-delete-collection` | Delete a collection and all its data | `collection_name` |
+
+#### Point Listing & Retrieval
+
+| Tool | Description | Parameters |
+|------|-------------|------------|
+| `qdrant-list-points` | List or filter points from a collection (paginated) | `collection_name`, `query_filter` (optional), `limit` (default 10), `offset` (optional), `with_vector` (optional), `with_payload` (optional, default True) |
+| `qdrant-count-points` | Count total or filtered points in a collection | `collection_name`, `query_filter` (optional) |
+| `qdrant-get-point` | Retrieve specific points by their IDs | `collection_name`, `ids`, `with_vector` (optional, default False), `with_payload` (optional, default True) |
+
+#### Point Update & Delete
+
+| Tool | Description | Parameters |
+|------|-------------|------------|
+| `qdrant-update-points` | Update payloads on specific points by ID | `collection_name`, `points_list` (list of `{id, payload}` objects) |
+| `qdrant-delete-points` | Delete specific points by ID | `collection_name`, `ids` (list of point IDs) |
+| `qdrant-update-vectors` | Update vector values on specific points | `collection_name`, `points` (list of `{id, vector}` objects) |
+| `qdrant-delete-vectors` | Delete named vectors from specific points | `collection_name`, `ids`, `vector_names` (optional) |
+| `qdrant-batch-update` | Execute multiple operations in a single request | `collection_name`, `operations` (list of `{operation_type, ...}` dicts) |
+
+#### Recommendations
+
+| Tool | Description | Parameters |
+|------|-------------|------------|
+| `qdrant-recommend` | Find points similar to examples (positive/negative) | `collection_name`, `positive` (optional), `negative` (optional), `query_filter` (optional), `limit` (default 10), `score_threshold` (optional), `with_vector` (optional), `with_payload` (optional, default True), `using` (optional) |
+
+### Detailed Tool Documentation
+
+#### `qdrant-store`
+Store some information in the Qdrant database with automatic embedding.
+
+**Input:**
+- `information` (string): Information to store
+- `metadata` (JSON, optional): Metadata to store alongside the content
+- `collection_name` (string, optional): Collection name (uses default if not specified)
+
+**Returns:** Confirmation message
+
+#### `qdrant-find`
+Retrieve relevant information from the Qdrant database using semantic search.
+
+**Input:**
+- `query` (string): Query to use for searching
+- `collection_name` (string, optional): Collection name (uses default if not specified)
+- `query_filter` (JSON object, optional): Filter to apply to the query
+
+**Returns:** List of matching entries
+
+#### `qdrant-list-collections`
+List all collections in the Qdrant server.
+
+**Input:** *(none)*
+
+**Returns:** Array of collection name strings
+
+#### `qdrant-get-collection-info`
+Get detailed information about a collection including size, segments, and configuration.
+
+**Input:**
+- `collection_name` (string): Name of the collection
+
+**Returns:** Dict with `status`, `vectors_count`, `points_count`, `segments_count`, and `config`
+
+#### `qdrant-create-collection`
+Create a new Qdrant collection. Requires vector size (matching your embedding model) and optional distance metric.
+
+**Input:**
+- `collection_name` (string, required): Name for the new collection
+- `vector_size` (int, required): Vector dimension matching your embedding model (e.g., 384 for all-MiniLM-L6-v2)
+- `distance` (string, optional, default "Cosine"): One of Cosine, Euclid, Dot, Manhattan
+
+**Returns:** Confirmation message
+
+#### `qdrant-update-collection`
+Update Qdrant collection settings like optimizer thresholds and replication factors.
+
+**Input:**
+- `collection_name` (string, required): Collection name
+- `optimizer_config` (JSON object, optional): Indexing threshold, max segment size, deleted threshold, vacuum min vector number
+- `replication_factor` (int, optional): Number of copies of each shard
+- `write_consistency_factor` (int, optional): How many replicas must acknowledge writes
+
+**Returns:** Confirmation message
+
+#### `qdrant-delete-collection`
+Delete a Qdrant collection and all its associated data. This operation is irreversible.
+
+**Input:**
+- `collection_name` (string, required): Collection name to delete
+
+**Returns:** Confirmation message
+
+#### `qdrant-list-points`
+List points from a Qdrant collection with optional filtering and pagination.
+
+**Input:**
+- `collection_name` (string, required): Collection name
+- `query_filter` (JSON object, optional): Filter with `must`, `must_not`, or `should` conditions
+- `limit` (int, optional, default 10): Maximum points to return
+- `offset` (string|int, optional): Offset for pagination
+- `with_vector` (bool|list[string], optional, default False): Include vector data
+- `with_payload` (bool|list[string], optional, default True): Include payload data
+
+**Returns:** `{points: [...], next_offset: ...}` — paginated results
+
+#### `qdrant-count-points`
+Count the number of points in a Qdrant collection, optionally filtered.
+
+**Input:**
+- `collection_name` (string, required): Collection name
+- `query_filter` (JSON object, optional): Filter to apply
+
+**Returns:** Integer count
+
+#### `qdrant-get-point`
+Retrieve specific points by their IDs. Returns full point data including payload and optionally vectors.
+
+**Input:**
+- `collection_name` (string, required): Collection name
+- `ids` (list of int|string, required): Point IDs to retrieve
+- `with_vector` (bool, optional, default False): Include vector data
+- `with_payload` (bool, optional, default True): Include payload data
+
+**Returns:** Array of `{id, payload, [vector]}` dicts
+
+#### `qdrant-update-points`
+Update payloads on specific points by their IDs.
+
+**Input:**
+- `collection_name` (string, required): Collection name
+- `points_list` (array of objects, required): Each object has `id` and optional `payload` keys. Example: `[{"id": "abc123", "payload": {"tag": "new"}}]`
+
+**Returns:** Confirmation message
+
+#### `qdrant-delete-points`
+Delete specific points from a Qdrant collection by their IDs.
+
+**Input:**
+- `collection_name` (string, required): Collection name
+- `ids` (array of int|string, required): Point IDs to delete
+
+**Returns:** Confirmation message
+
+#### `qdrant-update-vectors`
+Update vector values on specific points by their IDs. Useful for correcting embeddings or updating vectors without modifying payload.
+
+**Input:**
+- `collection_name` (string, required): Collection name
+- `points` (array of objects, required): Each object has `id` and `vector` keys. Example: `[{"id": "abc123", "vector": [0.1, 0.2, ...]}]`
+
+**Returns:** Confirmation message
+
+#### `qdrant-delete-vectors`
+Delete specific named vectors from points. Useful when a collection has multiple vector names and you only want to remove certain ones.
+
+**Input:**
+- `collection_name` (string, required): Collection name
+- `ids` (array of int|string, required): Point IDs
+- `vector_names` (array of string, optional): Specific vector names to delete; if omitted, deletes all vectors from the points
+
+**Returns:** Confirmation message
+
+#### `qdrant-batch-update`
+Execute multiple point operations in a single request.
+
+**Input:**
+- `collection_name` (string, required): Collection name
+- `operations` (array of objects, required): Each operation has an `operation_type` and type-specific fields:
+  - `{operation_type: "upsert", points: [...]}` — upsert points
+  - `{operation_type: "delete_points", ids: [...]}` — delete points
+  - `{operation_type: "set_payload", payload: {...}, points: [...]}` — set payload
+  - `{operation_type: "update_vectors", points: [...]}` — update vectors
+  - `{operation_type: "delete_vectors", vector_names: [...], ids: [...]}` — delete vectors
+
+**Returns:** Confirmation message with number of operations executed
+
+#### `qdrant-recommend`
+Find points similar to provided example point IDs (positive) and dissimilar to negative examples. Useful for "more like this" or hybrid recommendation patterns.
+
+**Input:**
+- `collection_name` (string, required): Collection name
+- `positive` (array of int|string, optional): Point IDs to find similar to
+- `negative` (array of int|string, optional): Point IDs to avoid
+- `query_filter` (JSON object, optional): Additional filter constraints
+- `limit` (int, optional, default 10): Maximum results
+- `score_threshold` (float, optional): Minimum similarity score (0.0–1.0)
+- `with_vector` (bool, optional, default False): Include vector data
+- `with_payload` (bool, optional, default True): Include payload data
+- `using` (string, optional): Name of the vector params to use for search
+
+**Returns:** Array of matching points with scores
 
 ## Environment Variables
 
